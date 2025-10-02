@@ -1,6 +1,6 @@
 import torch
 import tiktoken
-from gpt2 import GPTModel, text_to_token_ids, token_ids_to_text, generate
+from models.gpt2_model import GPTModel, text_to_token_ids, token_ids_to_text, generate
 from config import get_config
 
 # Get local configuration for development
