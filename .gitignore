@@ -1,0 +1,76 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+__pypackages__/
+
+# Datasets
+data/
+datasets/
+*.csv
+*.json
+*.jsonl
+*.parquet
+*.feather
+*.arrow
+
+# Model weights and checkpoints
+checkpoints/
+models/weights/
+*.safetensors
+pytorch_model.bin
+model.safetensors
+
+# Training outputs
+runs/
+logs/
+outputs/
+wandb/
+tensorboard/
+training_logs*/
+grpo_results*/
+cluster_export/
+grpo_final_model*/
+grpo_interrupted_model*/
+
+# Hugging Face cache
+.cache/
+transformers_cache/
+~/.cache/huggingface/
+
+# CUDA
+*.cudnn_benchmark
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Plot outputs
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+loss-plot.pdf
+training_progress.png
+
+# Temporary files
+tmp/
+temp/
+*.tmp
