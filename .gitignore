@@ -48,6 +48,11 @@ cluster_export/
 grpo_final_model*/
 grpo_interrupted_model*/
 
+# Training artifacts in new structure
+training/runs/
+training/outputs/
+training/checkpoints/
+
 # Hugging Face cache
 .cache/
 transformers_cache/

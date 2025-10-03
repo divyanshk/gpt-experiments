@@ -3,6 +3,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import tiktoken
 from pathlib import Path
 import json
+from utils.device_utils import get_device_config
 
 
 class GPTOSSLoader:
@@ -141,55 +142,31 @@ class GPTOSSClusterConfig:
     
     @staticmethod
     def get_local_config():
-        """Configuration for local MacBook development"""
-        print(f"Warning: {model_id} might not work in local mode")
-        return {
-            "use_quantization": True,
-            "device": "mps" if torch.backends.mps.is_available() else "cpu",
-            "max_memory": {"0": "8GB"} if torch.cuda.is_available() else None,
-            "generation_config": {
-                "max_new_tokens": 128,
-                "temperature": 0.7,
-                "top_k": 50,
-                "top_p": 0.9
-            }
-        }
+        """Configuration for local development - auto-detects hardware"""
+        return get_device_config("local")
     
     @staticmethod
-    def get_cluster_config(num_gpus=4):
-        """Configuration for GPU cluster deployment"""
-        return {
-            "use_quantization": False,  # Full precision on cluster
-            "device": "auto",
-            "max_memory": {str(i): "40GB" for i in range(num_gpus)},
-            "generation_config": {
-                "max_new_tokens": 512,
-                "temperature": 0.7,
-                "top_k": 50,
-                "top_p": 0.9
-            }
-        }
+    def get_cluster_config():
+        """Configuration for cluster deployment - assumes multi-GPU setup"""
+        return get_device_config("cluster")
 
 
 def create_gpt_oss_pipeline(mode="local", model_id="openai/gpt-oss-20b"):
-    """Factory function to create GPT-OSS pipeline based on mode"""
+    """Factory function to create GPT-OSS pipeline based on mode and auto-detected hardware"""
+    
+    print(f"🔧 Creating GPT-OSS pipeline in {mode} mode...")
     
     if mode == "local":
-        print(f"Warning: {model_id} might not work in local mode")
         config = GPTOSSClusterConfig.get_local_config()
-        loader = GPTOSSLoader(
-            model_id=model_id,
-            device=config["device"],
-            use_quantization=config["use_quantization"]
-        )
     elif mode == "cluster":
         config = GPTOSSClusterConfig.get_cluster_config()
-        loader = GPTOSSLoader(
-            model_id=model_id,
-            device=config["device"],
-            use_quantization=config["use_quantization"]
-        )
     else:
         raise ValueError("Mode must be 'local' or 'cluster'")
+    
+    loader = GPTOSSLoader(
+        model_id=model_id,
+        device=config["device"],
+        use_quantization=config["use_quantization"]
+    )
     
     return loader, config
