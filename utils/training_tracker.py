@@ -6,6 +6,33 @@ from datetime import datetime
 from pathlib import Path
 from transformers import TrainerCallback
 import torch
+from torch.profiler import profile, ProfilerActivity, schedule
+import os
+
+
+class ProfilingCallback(TrainerCallback):
+    """PyTorch profiler callback for detailed GPU profiling"""
+    def __init__(self, output_dir="./profiling_results"):
+        self.output_dir = output_dir
+        os.makedirs(output_dir, exist_ok=True)
+
+        self.profiler = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=schedule(wait=1, warmup=1, active=3, repeat=2),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(output_dir),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True
+        )
+        self.profiler.__enter__()
+
+    def on_step_begin(self, args, state, control, **kwargs):
+        if self.profiler:
+            self.profiler.step()
+
+    def on_train_end(self, args, state, control, **kwargs):
+        if self.profiler:
+            self.profiler.__exit__(None, None, None)
 
 
 class GRPOTrainingTracker(TrainerCallback):

@@ -5,17 +5,17 @@ from pathlib import Path
 import torch
 from datasets import load_dataset
 from transformers import (
-    AutoTokenizer, 
+    AutoTokenizer,
     AutoModelForCausalLM,
     TrainingArguments,
     BitsAndBytesConfig
 )
 from trl import GRPOConfig, GRPOTrainer
-from peft import LoraConfig, get_peft_model # Imported but not utilized (yet) 
+from peft import LoraConfig, get_peft_model # Imported but not utilized (yet)
 import json
 import os
 import tiktoken
-from utils.training_tracker import GRPOTrainingTracker, ProgressMonitor
+from utils.training_tracker import GRPOTrainingTracker, ProgressMonitor, ProfilingCallback
 from utils.device_utils import get_best_device
 from models.gpt2_loader import create_gpt2_pipeline
 import wandb
@@ -38,11 +38,7 @@ class GRPOPostTrainingPipeline:
                     "model_name": model_name,
                     "mode": mode,
                     "device": self.device
-                },
-                settings=wandb.Settings(
-                    _stats_sample_rate_seconds=1,
-                    _stats_disk_paths=["/"],
-                )
+                }
             )
         
         # Load model and tokenizer
@@ -250,13 +246,20 @@ class GRPOPostTrainingPipeline:
         
         # Initialize trainer with tracking callback
         try:
+            # Add profiling callback if running on GPU
+            callbacks = [tracker]
+            if self.device == "cuda":
+                profiling_callback = ProfilingCallback(output_dir=f"./profiling_results_{self.mode}")
+                callbacks.append(profiling_callback)
+                print("PyTorch profiler enabled - results will be saved to profiling_results_{self.mode}/")
+
             trainer = GRPOTrainer(
                 model=self.model,
                 args=training_args,
                 reward_funcs=[self.simple_reward_function],  # Required for GRPO
                 train_dataset=dataset["train"],
                 eval_dataset=dataset.get("test", None) or dataset.get("validation", None),
-                callbacks=[tracker]  # Add our custom tracking callback
+                callbacks=callbacks  # Add our custom tracking callback
             )
 
             if hasattr(trainer, 'tokenizer') and self.model_name == 'gpt2':
