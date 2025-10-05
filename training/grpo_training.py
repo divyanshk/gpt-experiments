@@ -11,7 +11,7 @@ from transformers import (
     BitsAndBytesConfig
 )
 from trl import GRPOConfig, GRPOTrainer
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, get_peft_model # Imported but not utilized (yet) 
 import json
 import os
 import tiktoken
@@ -42,7 +42,8 @@ class GRPOPostTrainingPipeline:
             )
         
         # Load model and tokenizer
-        self._load_gpt2_model()
+        if self.model_name == 'gpt2':
+            self._load_gpt2_model() # initializes self.model, self.tokenizer
     
     def _load_gpt2_model(self):
         """Load GPT-2 model using the new loader"""
@@ -254,7 +255,7 @@ class GRPOPostTrainingPipeline:
                 callbacks=[tracker]  # Add our custom tracking callback
             )
 
-            if hasattr(trainer, 'tokenizer'):
+            if hasattr(trainer, 'tokenizer') and self.model_name == 'gpt2':
                 trainer.tokenizer = self.tokenizer
                 
             print("GRPO Trainer initialized successfully")
@@ -336,10 +337,9 @@ class GRPOPostTrainingPipeline:
 
 
 def main():
-    """Main function for GRPO training with different GPT-2 models"""
+    """Main function for GRPO training with different models"""
     import sys
     
-    # Determine model based on command line argument
     if len(sys.argv) > 1:
         model_name = sys.argv[1]
     else:
