@@ -38,7 +38,11 @@ class GRPOPostTrainingPipeline:
                     "model_name": model_name,
                     "mode": mode,
                     "device": self.device
-                }
+                },
+                settings=wandb.Settings(
+                    _stats_sample_rate_seconds=1,
+                    _stats_disk_paths=["/"],
+                )
             )
         
         # Load model and tokenizer
