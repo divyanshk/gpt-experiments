@@ -169,9 +169,10 @@ class GRPOPostTrainingPipeline:
                 output_dir="./grpo_results_local",
                 num_train_epochs=1,
                 per_device_train_batch_size=1,
-                gradient_accumulation_steps=4,
+                gradient_accumulation_steps=1, # Number of updates steps to accumulate the gradients for, 
+                                               #    before performing a backward/update pass. Affects logging.
                 learning_rate=5e-5,
-                warmup_steps=100,
+                warmup_steps=0,
                 logging_steps=10,
                 save_steps=500,
                 dataloader_num_workers=0,
@@ -180,7 +181,9 @@ class GRPOPostTrainingPipeline:
                 gradient_checkpointing=True,
                 report_to=report_to,
                 # GRPO specific parameters
-                generation_batch_size=8,  # Must be divisible by num_generations
+                generation_batch_size=8,  # Must be divisible by num_generations.
+                                          #    A batch can contain num_generations 
+                                          #    generations for many prompts.
                 num_generations=8,        # Number of generations per prompt
             )
         else:  # cluster
@@ -364,7 +367,7 @@ def main():
     print("Example: python grpo_training.py distilgpt2")
     
     # Train with limited data for local development
-    pipeline.train(max_samples=100)  # Very small for testing
+    pipeline.train(max_samples=1)  # Very small for testing
     
     # Export for cluster
     pipeline.export_for_cluster()
