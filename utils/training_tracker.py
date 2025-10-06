@@ -12,8 +12,9 @@ import os
 
 class ProfilingCallback(TrainerCallback):
     """PyTorch profiler callback for detailed GPU profiling"""
-    def __init__(self, output_dir="./profiling_results"):
+    def __init__(self, output_dir="./profiling_results", export_chrome_trace=True):
         self.output_dir = output_dir
+        self.export_chrome = export_chrome_trace
         os.makedirs(output_dir, exist_ok=True)
 
         self.profiler = profile(
@@ -33,6 +34,13 @@ class ProfilingCallback(TrainerCallback):
     def on_train_end(self, args, state, control, **kwargs):
         if self.profiler:
             self.profiler.__exit__(None, None, None)
+
+            # Export Chrome trace for viewing in chrome://tracing
+            if self.export_chrome:
+                chrome_trace_path = os.path.join(self.output_dir, "trace.json")
+                self.profiler.export_chrome_trace(chrome_trace_path)
+                print(f"Chrome trace exported to {chrome_trace_path}")
+                print(f"View at: chrome://tracing (load the trace.json file)")
 
 
 class GRPOTrainingTracker(TrainerCallback):
