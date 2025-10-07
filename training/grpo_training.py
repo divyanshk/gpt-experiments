@@ -1,6 +1,7 @@
 import sys
 import os
 from pathlib import Path
+import argparse
 
 import torch
 from datasets import load_dataset
@@ -22,10 +23,11 @@ import wandb
 
 
 class GRPOPostTrainingPipeline:
-    def __init__(self, model_name="gpt2", mode="local", use_wandb=True):
+    def __init__(self, model_name="gpt2", mode="local", use_wandb=True, use_lora=False):
         self.model_name = model_name
         self.mode = mode
         self.use_wandb = use_wandb
+        self.use_lora = use_lora
         self.device = get_best_device()
         
         # Initialize wandb if enabled
@@ -52,15 +54,37 @@ class GRPOPostTrainingPipeline:
             model_name=self.model_name,
             mode=self.mode
         )
-        
+
         # Load model and tokenizer
         self.model, self.tokenizer = gpt2_loader.load_model()
-        
+
+        # Apply LoRA if enabled
+        if self.use_lora:
+            self._apply_lora()
+
         # Print model info
         info = gpt2_loader.get_model_info()
         print(f"GPT-2 loaded: {info['total_parameters']:,} parameters")
         print(f"Device: {info['device']}, Quantized: {info['quantized']}")
-    
+        if self.use_lora:
+            trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            print(f"LoRA enabled: {trainable_params:,} trainable parameters ({100 * trainable_params / info['total_parameters']:.2f}%)")
+
+    def _apply_lora(self):
+        """Apply LoRA (Low-Rank Adaptation) to the model for parameter-efficient fine-tuning"""
+        lora_config = LoraConfig(
+            r=16,                       # LoRA rank
+            lora_alpha=32,              # LoRA alpha (scaling factor)
+            target_modules=["c_attn", "c_proj"],  # Apply to attention layers in GPT-2
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM"
+        )
+
+        print("Applying LoRA to model...")
+        self.model = get_peft_model(self.model, lora_config)
+        self.model.print_trainable_parameters()
+
     def load_and_prepare_dataset(self, dataset_name="knoveleng/open-rs", max_samples=None):
         """Load and prepare the Open-RS dataset for GRPO training"""
         # Load dataset
@@ -348,26 +372,28 @@ class GRPOPostTrainingPipeline:
 
 def main():
     """Main function for GRPO training with different models"""
-    import sys
-    
-    if len(sys.argv) > 1:
-        model_name = sys.argv[1]
-    else:
-        model_name = "gpt2"  # Default to GPT-2 small
-    
+
+    parser = argparse.ArgumentParser(description="GRPO Training Pipeline")
+    parser.add_argument("--model", type=str, default="gpt2", help="Model name (e.g., gpt2, distilgpt2)")
+    parser.add_argument("--mode", type=str, default="local", choices=["local", "cluster"], help="Training mode")
+    parser.add_argument("--use-lora", action="store_true", help="Enable LoRA for parameter-efficient fine-tuning")
+    parser.add_argument("--max-samples", type=int, default=100, help="Maximum training samples")
+    parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
+    args = parser.parse_args()
+
     # Create pipeline
     pipeline = GRPOPostTrainingPipeline(
-        model_name=model_name,
-        mode="local",
-        use_wandb=True
+        model_name=args.model,
+        mode=args.mode,
+        use_wandb=not args.no_wandb,
+        use_lora=args.use_lora
     )
-    
-    print(f"\nStarting GRPO training with {model_name}...")
-    print("Usage: python grpo_training.py [model_name]")
-    print("Example: python grpo_training.py distilgpt2")
-    
-    # Train with limited data for local development
-    pipeline.train(max_samples=1)  # Very small for testing
+
+    print(f"\nStarting GRPO training with {args.model}...")
+    print(f"Mode: {args.mode}, LoRA: {args.use_lora}, WandB: {not args.no_wandb}")
+
+    # Train with specified samples
+    pipeline.train(max_samples=args.max_samples)
     
     # Export for cluster
     pipeline.export_for_cluster()
