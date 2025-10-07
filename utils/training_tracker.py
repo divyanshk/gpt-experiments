@@ -59,7 +59,12 @@ class GRPOTrainingTracker(TrainerCallback):
             "train_loss": [],
             "eval_loss": [],
             "reward_scores": [],
+            "reward_mean": [],
+            "reward_std": [],
             "kl_divergence": [],
+            "generation_length_mean": [],
+            "generation_length_max": [],
+            "generation_length_min": [],
             "learning_rate": [],
             "epoch": [],
             "timestamp": [],
@@ -83,7 +88,12 @@ class GRPOTrainingTracker(TrainerCallback):
                     "train_loss",
                     "eval_loss",
                     "reward_score",
+                    "reward_mean",
+                    "reward_std",
                     "kl_divergence",
+                    "generation_length_mean",
+                    "generation_length_max",
+                    "generation_length_min",
                     "learning_rate",
                     "timestamp",
                 ]
@@ -98,11 +108,16 @@ class GRPOTrainingTracker(TrainerCallback):
         current_epoch = state.epoch
         timestamp = datetime.now().isoformat()
 
-        # Extract metrics from logs
-        train_loss = logs.get("train_loss", None)
+        # Extract metrics from logs - using actual GRPO key names
+        train_loss = logs.get("train_loss", logs.get("loss", None))
         eval_loss = logs.get("eval_loss", None)
-        reward_score = logs.get("rewards/mean", logs.get("reward", None))
-        kl_div = logs.get("objective/kl", logs.get("kl_divergence", None))
+        reward_score = logs.get("rewards/simple_reward_function/mean", logs.get("reward", None))
+        reward_mean = logs.get("rewards/simple_reward_function/mean", None)
+        reward_std = logs.get("rewards/simple_reward_function/std", logs.get("reward_std", None))
+        kl_div = logs.get("objective/kl", logs.get("kl_divergence", logs.get("kl", None)))
+        gen_len_mean = logs.get("completions/mean_length", None)
+        gen_len_max = logs.get("completions/max_length", None)
+        gen_len_min = logs.get("completions/min_length", None)
         lr = logs.get("train/learning_rate", logs.get("learning_rate", None))
 
         # Store in memory
@@ -111,7 +126,12 @@ class GRPOTrainingTracker(TrainerCallback):
         self.metrics["train_loss"].append(train_loss)
         self.metrics["eval_loss"].append(eval_loss)
         self.metrics["reward_scores"].append(reward_score)
+        self.metrics["reward_mean"].append(reward_mean)
+        self.metrics["reward_std"].append(reward_std)
         self.metrics["kl_divergence"].append(kl_div)
+        self.metrics["generation_length_mean"].append(gen_len_mean)
+        self.metrics["generation_length_max"].append(gen_len_max)
+        self.metrics["generation_length_min"].append(gen_len_min)
         self.metrics["learning_rate"].append(lr)
         self.metrics["timestamp"].append(timestamp)
 
@@ -125,7 +145,12 @@ class GRPOTrainingTracker(TrainerCallback):
                     train_loss,
                     eval_loss,
                     reward_score,
+                    reward_mean,
+                    reward_std,
                     kl_div,
+                    gen_len_mean,
+                    gen_len_max,
+                    gen_len_min,
                     lr,
                     timestamp,
                 ]
@@ -139,7 +164,9 @@ class GRPOTrainingTracker(TrainerCallback):
             self.plot_progress()
 
         # Print progress
-        self._print_progress(current_step, train_loss, eval_loss, reward_score)
+        self._print_progress(
+            current_step, train_loss, eval_loss, reward_score, kl_div, gen_len_mean
+        )
 
     def _save_state(self):
         """Save current training state to JSON"""
@@ -152,7 +179,9 @@ class GRPOTrainingTracker(TrainerCallback):
         with open(self.json_file, "w") as f:
             json.dump(state, f, indent=2)
 
-    def _print_progress(self, step, train_loss, eval_loss, reward_score):
+    def _print_progress(
+        self, step, train_loss, eval_loss, reward_score, kl_div=None, gen_len_mean=None
+    ):
         """Print formatted progress update"""
         print(f"\n[Step {step}] Progress Update:")
         if train_loss is not None:
@@ -161,6 +190,10 @@ class GRPOTrainingTracker(TrainerCallback):
             print(f"  Eval Loss: {eval_loss:.4f}")
         if reward_score is not None:
             print(f"  Reward Score: {reward_score:.4f}")
+        if kl_div is not None:
+            print(f"  KL Divergence: {kl_div:.4f}")
+        if gen_len_mean is not None:
+            print(f"  Avg Generation Length: {gen_len_mean:.1f} tokens")
         print("-" * 40)
 
     def plot_progress(self):

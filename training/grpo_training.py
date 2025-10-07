@@ -10,15 +10,22 @@ from trl import GRPOConfig, GRPOTrainer
 import wandb
 from models.gpt2_loader import create_gpt2_pipeline
 from utils.device_utils import get_best_device
-from utils.training_tracker import GRPOTrainingTracker, ProfilingCallback, ProgressMonitor
+from utils.training_tracker import (
+    GRPOTrainingTracker,
+    ProfilingCallback,
+    ProgressMonitor,
+)
 
 
 class GRPOPostTrainingPipeline:
-    def __init__(self, model_name="gpt2", mode="local", use_wandb=True, use_lora=False):
+    def __init__(
+        self, model_name="gpt2", mode="local", use_wandb=True, use_lora=False, verbose=True
+    ):
         self.model_name = model_name
         self.mode = mode
         self.use_wandb = use_wandb
         self.use_lora = use_lora
+        self.verbose = verbose
         self.device = get_best_device()
 
         # Initialize wandb if enabled
@@ -166,10 +173,13 @@ class GRPOPostTrainingPipeline:
     def get_training_config(self):
         """Get training configuration based on mode"""
         # Add wandb reporting if enabled
-        report_to = "wandb" if self.use_wandb else None
+        report_to = "wandb" if self.use_wandb else "none"
 
         # Adjust precision based on device (no fp16 on MPS)
         use_fp16 = self.device == "cuda"
+
+        # Set logging level based on verbose flag
+        log_level = "passive" if self.verbose else "warning"
 
         if self.mode == "local":
             return GRPOConfig(
@@ -187,11 +197,14 @@ class GRPOPostTrainingPipeline:
                 fp16=use_fp16,  # No fp16 for local GPT2 or MPS
                 gradient_checkpointing=True,
                 report_to=report_to,
+                log_level=log_level,
+                disable_tqdm=not self.verbose,
                 # GRPO specific parameters
                 generation_batch_size=8,  # Must be divisible by num_generations.
                 #    A batch can contain num_generations
                 #    generations for many prompts.
                 num_generations=8,  # Number of generations per prompt
+                beta=0.01,  # KL penalty coefficient (non-zero enables KL divergence logging)
             )
         else:  # cluster
             return GRPOConfig(
@@ -208,9 +221,12 @@ class GRPOPostTrainingPipeline:
                 fp16=use_fp16,  # Consistent fp16 logic
                 gradient_checkpointing=True,
                 report_to=report_to,
+                log_level=log_level,
+                disable_tqdm=not self.verbose,
                 # GRPO specific parameters
                 generation_batch_size=16,  # Must be divisible by num_generations
                 num_generations=8,  # Number of generations per prompt
+                beta=0.01,  # KL penalty coefficient (non-zero enables KL divergence logging)
             )
 
     def train(self, max_samples=1000 if True else None):  # Set max_samples for local
@@ -385,11 +401,16 @@ def main():
     )
     parser.add_argument("--max-samples", type=int, default=100, help="Maximum training samples")
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
+    parser.add_argument("--quiet", action="store_true", help="Disable verbose training logs")
     args = parser.parse_args()
 
     # Create pipeline
     pipeline = GRPOPostTrainingPipeline(
-        model_name=args.model, mode=args.mode, use_wandb=not args.no_wandb, use_lora=args.use_lora
+        model_name=args.model,
+        mode=args.mode,
+        use_wandb=not args.no_wandb,
+        use_lora=args.use_lora,
+        verbose=not args.quiet,
     )
 
     print(f"\nStarting GRPO training with {args.model}...")
