@@ -1,0 +1,74 @@
+[project]
+name = "gpt-experiments"
+version = "0.1.0"
+description = "GRPO post-training experiments for GPT models"
+requires-python = ">=3.12"
+
+[tool.ruff]
+# Line length that triggers warnings
+line-length = 100
+
+# Python version for compatibility checks
+target-version = "py312"
+
+# Exclude directories from linting
+exclude = [
+    ".git",
+    "__pycache__",
+    "venv",
+    "wandb",
+    "*.egg-info",
+    "grpo_results_*",
+    "profiling_results_*",
+    "training_logs_*",
+]
+
+[tool.ruff.lint]
+# Rule categories to enable
+# E: pycodestyle errors (PEP 8 violations)
+# F: pyflakes (unused imports, undefined names)
+# I: isort (import sorting)
+# N: pep8-naming (naming conventions)
+# W: pycodestyle warnings
+# UP: pyupgrade (modern Python syntax)
+# B: flake8-bugbear (common bugs)
+# C4: flake8-comprehensions (better list/dict comprehensions)
+# SIM: flake8-simplify (simplification suggestions)
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+
+# Rules to ignore
+ignore = [
+    "E501",  # Line too long (handled by formatter)
+    "N803",  # Argument name should be lowercase (allows single-char math vars)
+    "N806",  # Variable in function should be lowercase
+    "N999",  # Invalid module name (allow hyphens in project root name)
+]
+
+# Allow fix for all enabled rules (except some unsafe ones)
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore import violations in __init__.py files
+"__init__.py" = ["F401", "F403"]
+
+[tool.ruff.lint.isort]
+# Configure import sorting
+known-first-party = ["utils", "models", "training"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
+
+# Respect magic trailing comma
+skip-magic-trailing-comma = false
+
+# Auto-detect line ending
+line-ending = "auto"
