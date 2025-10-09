@@ -1,0 +1,44 @@
+# GRPO Training Configuration - Local Mode
+# Optimized for development and testing on local hardware
+
+mode: local
+output_dir: ./grpo_results_local
+
+# Training Hyperparameters
+training:
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 1
+  learning_rate: 5.0e-5
+  warmup_steps: 0
+
+# Logging & Checkpointing
+logging:
+  logging_steps: 10
+  save_steps: 500
+  log_level: passive
+  disable_tqdm: false
+
+# Data Loading
+data:
+  dataloader_num_workers: 0
+  remove_unused_columns: false
+
+# Optimization
+optimization:
+  fp16: false  # Will be auto-set based on device
+  gradient_checkpointing: true
+
+# GRPO Specific Parameters
+grpo:
+  generation_batch_size: 8  # Must be divisible by num_generations
+  num_generations: 8        # Number of generations per prompt
+  beta: 0.01                # KL penalty coefficient (enables KL tracking)
+
+# LoRA Configuration (optional)
+lora:
+  enabled: false
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: ["c_attn", "c_proj"]  # GPT-2 specific

@@ -8,7 +8,9 @@ from peft import LoraConfig, get_peft_model
 from trl import GRPOConfig, GRPOTrainer
 
 import wandb
+from configs.grpo_config import GRPOConfigLoader
 from models.gpt2_loader import create_gpt2_pipeline
+from models.gpt_oss_model import create_gpt_oss_pipeline
 from utils.device_utils import get_best_device
 from utils.training_tracker import (
     GRPOTrainingTracker,
@@ -19,7 +21,13 @@ from utils.training_tracker import (
 
 class GRPOPostTrainingPipeline:
     def __init__(
-        self, model_name="gpt2", mode="local", use_wandb=True, use_lora=False, verbose=True
+        self,
+        model_name="gpt2",
+        mode="local",
+        use_wandb=True,
+        use_lora=False,
+        verbose=True,
+        config_path=None,
     ):
         self.model_name = model_name
         self.mode = mode
@@ -27,6 +35,10 @@ class GRPOPostTrainingPipeline:
         self.use_lora = use_lora
         self.verbose = verbose
         self.device = get_best_device()
+        self.config_path = config_path
+
+        # Load GRPO configuration from YAML
+        self.config_loader = GRPOConfigLoader(config_path=config_path, mode=mode)
 
         # Initialize wandb if enabled
         if self.use_wandb:
@@ -37,12 +49,16 @@ class GRPOPostTrainingPipeline:
                 config={"model_name": model_name, "mode": mode, "device": self.device},
             )
 
-        # Load model and tokenizer
-        if self.model_name == "gpt2":
+        # Load model and tokenizer based on model type
+        if self.model_name == "gpt2" or self.model_name.startswith("gpt2"):
             self._load_gpt2_model()  # initializes self.model, self.tokenizer
+        elif "gpt-oss" in self.model_name or self.model_name == "openai/gpt-oss-20b":
+            self._load_gpt_oss_20b_model()  # initializes self.model, self.tokenizer
+        else:
+            raise ValueError(f"Unsupported model: {self.model_name}")
 
     def _load_gpt2_model(self):
-        """Load GPT-2 model using the new loader"""
+        """Load GPT-2 model using the loader"""
         # Create GPT-2 loader
         gpt2_loader = create_gpt2_pipeline(model_name=self.model_name, mode=self.mode)
 
@@ -62,21 +78,55 @@ class GRPOPostTrainingPipeline:
             print(
                 f"LoRA enabled: {trainable_params:,} trainable parameters ({100 * trainable_params / info['total_parameters']:.2f}%)"
             )
-
+    
     def _apply_lora(self):
         """Apply LoRA (Low-Rank Adaptation) to the model for parameter-efficient fine-tuning"""
+        # Determine target modules based on model architecture
+        if "gpt2" in self.model_name.lower():
+            target_modules = ["c_attn", "c_proj"]  # GPT-2 architecture
+        elif "gpt-oss" in self.model_name.lower():
+            # GPT-OSS uses different naming convention
+            target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]
+        else:
+            # Default to common transformer attention layers
+            target_modules = ["q_proj", "v_proj"]
+
         lora_config = LoraConfig(
             r=16,  # LoRA rank
             lora_alpha=32,  # LoRA alpha (scaling factor)
-            target_modules=["c_attn", "c_proj"],  # Apply to attention layers in GPT-2
+            target_modules=target_modules,
             lora_dropout=0.05,
             bias="none",
             task_type="CAUSAL_LM",
         )
 
-        print("Applying LoRA to model...")
+        print(f"Applying LoRA to model (target modules: {target_modules})...")
         self.model = get_peft_model(self.model, lora_config)
         self.model.print_trainable_parameters()
+
+    def _load_gpt_oss_20b_model(self):
+        """Load GPT-OSS-20B model using the loader"""
+        # Create GPT-OSS loader
+        gpt_oss_loader, config = create_gpt_oss_pipeline(
+            mode=self.mode, model_id=self.model_name
+        )
+
+        # Load model and tokenizer
+        self.model, self.tokenizer = gpt_oss_loader.load_model()
+
+        # Apply LoRA if enabled (recommended for large models)
+        if self.use_lora:
+            self._apply_lora()
+
+        # Print model info
+        info = gpt_oss_loader.get_model_info()
+        print(f"GPT-OSS loaded: {info['total_parameters']:,} parameters")
+        print(f"Device: {info['device']}, Quantized: {info['quantized']}")
+        if self.use_lora:
+            trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+            print(
+                f"LoRA enabled: {trainable_params:,} trainable parameters ({100 * trainable_params / info['total_parameters']:.2f}%)"
+            )
 
     def load_and_prepare_dataset(self, dataset_name="knoveleng/open-rs", max_samples=None):
         """Load and prepare the Open-RS dataset for GRPO training"""
@@ -171,63 +221,16 @@ class GRPOPostTrainingPipeline:
         return rewards
 
     def get_training_config(self):
-        """Get training configuration based on mode"""
+        """Get training configuration from YAML config"""
         # Add wandb reporting if enabled
         report_to = "wandb" if self.use_wandb else "none"
 
-        # Adjust precision based on device (no fp16 on MPS)
-        use_fp16 = self.device == "cuda"
+        # Get GRPO config from YAML loader
+        training_args = self.config_loader.get_grpo_config(
+            report_to=report_to, device=self.device, verbose=self.verbose
+        )
 
-        # Set logging level based on verbose flag
-        log_level = "passive" if self.verbose else "warning"
-
-        if self.mode == "local":
-            return GRPOConfig(
-                output_dir="./grpo_results_local",
-                num_train_epochs=1,
-                per_device_train_batch_size=1,
-                gradient_accumulation_steps=1,  # Number of updates steps to accumulate the gradients for,
-                #    before performing a backward/update pass. Affects logging.
-                learning_rate=5e-5,
-                warmup_steps=0,
-                logging_steps=10,
-                save_steps=500,
-                dataloader_num_workers=0,
-                remove_unused_columns=False,
-                fp16=use_fp16,  # No fp16 for local GPT2 or MPS
-                gradient_checkpointing=True,
-                report_to=report_to,
-                log_level=log_level,
-                disable_tqdm=not self.verbose,
-                # GRPO specific parameters
-                generation_batch_size=8,  # Must be divisible by num_generations.
-                #    A batch can contain num_generations
-                #    generations for many prompts.
-                num_generations=8,  # Number of generations per prompt
-                beta=0.01,  # KL penalty coefficient (non-zero enables KL divergence logging)
-            )
-        else:  # cluster
-            return GRPOConfig(
-                output_dir="./grpo_results_cluster",
-                num_train_epochs=3,
-                per_device_train_batch_size=8,
-                gradient_accumulation_steps=2,
-                learning_rate=3e-5,
-                warmup_steps=500,
-                logging_steps=50,
-                save_steps=1000,
-                dataloader_num_workers=4,
-                remove_unused_columns=False,
-                fp16=use_fp16,  # Consistent fp16 logic
-                gradient_checkpointing=True,
-                report_to=report_to,
-                log_level=log_level,
-                disable_tqdm=not self.verbose,
-                # GRPO specific parameters
-                generation_batch_size=16,  # Must be divisible by num_generations
-                num_generations=8,  # Number of generations per prompt
-                beta=0.01,  # KL penalty coefficient (non-zero enables KL divergence logging)
-            )
+        return training_args
 
     def train(self, max_samples=1000 if True else None):  # Set max_samples for local
         """Run GRPO training with comprehensive tracking"""
@@ -391,7 +394,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="GRPO Training Pipeline")
     parser.add_argument(
-        "--model", type=str, default="gpt2", help="Model name (e.g., gpt2, distilgpt2)"
+        "--model",
+        type=str,
+        default="gpt2",
+        help="Model name (e.g., gpt2, gpt2-medium, openai/gpt-oss-20b)",
     )
     parser.add_argument(
         "--mode", type=str, default="local", choices=["local", "cluster"], help="Training mode"
@@ -402,6 +408,9 @@ def main():
     parser.add_argument("--max-samples", type=int, default=100, help="Maximum training samples")
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     parser.add_argument("--quiet", action="store_true", help="Disable verbose training logs")
+    parser.add_argument(
+        "--config", type=str, default=None, help="Path to custom GRPO config YAML file"
+    )
     args = parser.parse_args()
 
     # Create pipeline
@@ -411,7 +420,12 @@ def main():
         use_wandb=not args.no_wandb,
         use_lora=args.use_lora,
         verbose=not args.quiet,
+        config_path=args.config,
     )
+
+    # Print loaded configuration
+    if not args.quiet:
+        pipeline.config_loader.print_config()
 
     print(f"\nStarting GRPO training with {args.model}...")
     print(f"Mode: {args.mode}, LoRA: {args.use_lora}, WandB: {not args.no_wandb}")
