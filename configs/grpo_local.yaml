@@ -26,7 +26,8 @@ data:
 
 # Optimization
 optimization:
-  fp16: false  # Will be auto-set based on device
+  optim: adamw_torch_fused    # Optimizer: adamw_torch_fused (faster on modern GPUs), adafactor, etc.
+  fp16: false                 # Will be auto-set based on device
   gradient_checkpointing: true
 
 # GRPO Specific Parameters
@@ -36,9 +37,10 @@ grpo:
   beta: 0.01                # KL penalty coefficient (enables KL tracking)
 
 # LoRA Configuration (optional)
+# Note: lora_alpha defaults to 2x the rank if not specified
 lora:
   enabled: false
-  r: 16
-  lora_alpha: 32
+  r: 16                # LoRA rank (smaller = fewer params, less capacity)
+  lora_alpha: 32       # Scaling factor (typically 2x rank)
   lora_dropout: 0.05
-  target_modules: ["c_attn", "c_proj"]  # GPT-2 specific
+  target_modules: ["c_attn", "c_proj"]  # GPT-2: auto-detected, can override here

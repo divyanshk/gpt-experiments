@@ -84,6 +84,7 @@ class GRPOConfigLoader:
             dataloader_num_workers=cfg["data"]["dataloader_num_workers"],
             remove_unused_columns=cfg["data"]["remove_unused_columns"],
             # Optimization
+            optim=cfg["optimization"].get("optim", "adamw_torch_fused"),
             fp16=use_fp16,
             gradient_checkpointing=cfg["optimization"]["gradient_checkpointing"],
             # GRPO specific

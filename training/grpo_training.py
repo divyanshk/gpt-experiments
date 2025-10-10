@@ -81,6 +81,9 @@ class GRPOPostTrainingPipeline:
     
     def _apply_lora(self):
         """Apply LoRA (Low-Rank Adaptation) to the model for parameter-efficient fine-tuning"""
+        # Get LoRA config from YAML
+        lora_cfg = self.config_loader.get_lora_config()
+
         # Determine target modules based on model architecture
         if "gpt2" in self.model_name.lower():
             target_modules = ["c_attn", "c_proj"]  # GPT-2 architecture
@@ -91,16 +94,26 @@ class GRPOPostTrainingPipeline:
             # Default to common transformer attention layers
             target_modules = ["q_proj", "v_proj"]
 
+        # Override with config if specified
+        if "target_modules" in lora_cfg and lora_cfg["target_modules"]:
+            target_modules = lora_cfg["target_modules"]
+
+        # Get LoRA rank and alpha from config
+        lora_r = lora_cfg.get("r", 16)
+        lora_alpha = lora_cfg.get("lora_alpha", lora_r * 2)  # Default: 2x rank
+
         lora_config = LoraConfig(
-            r=16,  # LoRA rank
-            lora_alpha=32,  # LoRA alpha (scaling factor)
+            r=lora_r,
+            lora_alpha=lora_alpha,
             target_modules=target_modules,
-            lora_dropout=0.05,
+            lora_dropout=lora_cfg.get("lora_dropout", 0.05),
             bias="none",
             task_type="CAUSAL_LM",
         )
 
-        print(f"Applying LoRA to model (target modules: {target_modules})...")
+        print(f"Applying LoRA to model:")
+        print(f"  Rank: {lora_r}, Alpha: {lora_alpha}")
+        print(f"  Target modules: {target_modules}")
         self.model = get_peft_model(self.model, lora_config)
         self.model.print_trainable_parameters()
 
