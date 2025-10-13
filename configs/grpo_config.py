@@ -91,6 +91,7 @@ class GRPOConfigLoader:
             generation_batch_size=cfg["grpo"]["generation_batch_size"],
             num_generations=cfg["grpo"]["num_generations"],
             beta=cfg["grpo"]["beta"],
+            use_vllm=cfg["grpo"].get("use_vllm", False),
         )
 
         return grpo_config

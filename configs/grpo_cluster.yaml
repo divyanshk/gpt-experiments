@@ -35,6 +35,7 @@ grpo:
   generation_batch_size: 16  # Must be divisible by num_generations
   num_generations: 8         # Number of generations per prompt
   beta: 0.01                 # KL penalty coefficient (enables KL tracking)
+  use_vllm: false            # Use vLLM for faster generation (requires vllm package)
 
 # LoRA Configuration (optional)
 # Note: lora_alpha defaults to 2x the rank if not specified
