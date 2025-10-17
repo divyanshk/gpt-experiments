@@ -18,6 +18,15 @@ from utils.training_tracker import (
     ProgressMonitor,
 )
 
+# Import advanced reward functions
+from training.rewards import (
+    format_reward,
+    tag_count_reward,
+    reasoning_steps_reward,
+    get_repetition_penalty_reward,
+    get_all_available_rewards,
+)
+
 
 class GRPOPostTrainingPipeline:
     def __init__(
@@ -28,6 +37,7 @@ class GRPOPostTrainingPipeline:
         use_lora=False,
         verbose=True,
         config_path=None,
+        use_advanced_rewards=False,
     ):
         self.model_name = model_name
         self.mode = mode
@@ -36,6 +46,7 @@ class GRPOPostTrainingPipeline:
         self.verbose = verbose
         self.device = get_best_device()
         self.config_path = config_path
+        self.use_advanced_rewards = use_advanced_rewards
 
         # Load GRPO configuration from YAML
         self.config_loader = GRPOConfigLoader(config_path=config_path, mode=mode)
@@ -233,6 +244,36 @@ class GRPOPostTrainingPipeline:
 
         return rewards
 
+    def get_reward_functions(self, use_advanced=False):
+        """Get reward functions for training.
+
+        Args:
+            use_advanced: If True, use advanced reward functions from rewards.py
+                         If False, use simple_reward_function (default)
+
+        Returns:
+            List of reward functions
+        """
+        if not use_advanced:
+            return [self.simple_reward_function]
+
+        # Use advanced rewards from rewards.py
+        reward_functions = [
+            format_reward,              # Check for proper <think></think> tags
+            reasoning_steps_reward,     # Encourage step-by-step thinking
+            get_repetition_penalty_reward(ngram_size=3, max_penalty=-0.5),  # Penalize repetition
+        ]
+
+        # Add available rewards based on installed dependencies
+        available_rewards = get_all_available_rewards()
+        if "accuracy" in available_rewards:
+            print("✓ Adding accuracy reward (math verification available)")
+            # Note: accuracy_reward requires 'solution' in dataset
+            # Uncomment if your dataset has ground truth solutions:
+            # reward_functions.append(available_rewards["accuracy"])
+
+        return reward_functions
+
     def get_training_config(self):
         """Get training configuration from YAML config"""
         # Add wandb reporting if enabled
@@ -303,10 +344,18 @@ class GRPOPostTrainingPipeline:
                     "PyTorch profiler enabled - results will be saved to profiling_results_{self.mode}/"
                 )
 
+            # Get reward functions (simple or advanced)
+            reward_funcs = self.get_reward_functions(use_advanced=self.use_advanced_rewards)
+
+            if self.use_advanced_rewards:
+                print(f"Using {len(reward_funcs)} advanced reward functions from rewards.py")
+            else:
+                print("Using simple_reward_function (use --use-advanced-rewards for more)")
+
             trainer = GRPOTrainer(
                 model=self.model,
                 args=training_args,
-                reward_funcs=[self.simple_reward_function],  # Required for GRPO
+                reward_funcs=reward_funcs,  # Use selected reward functions
                 train_dataset=dataset["train"],
                 eval_dataset=dataset.get("test", None) or dataset.get("validation", None),
                 callbacks=callbacks,  # Add our custom tracking callback
@@ -418,6 +467,11 @@ def main():
     parser.add_argument(
         "--use-lora", action="store_true", help="Enable LoRA for parameter-efficient fine-tuning"
     )
+    parser.add_argument(
+        "--use-advanced-rewards",
+        action="store_true",
+        help="Use advanced reward functions from rewards.py (format, reasoning, repetition)",
+    )
     parser.add_argument("--max-samples", type=int, default=100, help="Maximum training samples")
     parser.add_argument("--no-wandb", action="store_true", help="Disable WandB logging")
     parser.add_argument("--quiet", action="store_true", help="Disable verbose training logs")
@@ -434,6 +488,7 @@ def main():
         use_lora=args.use_lora,
         verbose=not args.quiet,
         config_path=args.config,
+        use_advanced_rewards=args.use_advanced_rewards,
     )
 
     # Print loaded configuration

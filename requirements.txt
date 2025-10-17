@@ -8,4 +8,14 @@ accelerate>=0.24.0
 tiktoken>=0.5.0
 matplotlib>=3.7.0
 numpy>=1.24.0
-wandb>=0.16.0pyyaml>=6.0
+wandb>=0.16.0
+pyyaml>=6.0
+
+# Optional dependencies for reward functions
+# Math verification (for accuracy_reward, len_reward, etc.)
+latex2sympy2-extended>=1.0.0  # Optional: for LaTeX math parsing
+math-verify>=0.1.0            # Optional: for mathematical verification
+
+# Code execution (for code_reward)
+e2b-code-interpreter>=0.0.10  # Optional: for code execution in sandbox
+python-dotenv>=1.0.0          # Optional: for E2B API key management
