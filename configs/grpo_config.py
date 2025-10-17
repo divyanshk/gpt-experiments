@@ -92,6 +92,12 @@ class GRPOConfigLoader:
             num_generations=cfg["grpo"]["num_generations"],
             beta=cfg["grpo"]["beta"],
             use_vllm=cfg["grpo"].get("use_vllm", False),
+            # Token-level vs Sequence-level Configuration
+            loss_type=cfg["grpo"].get("loss_type", "dapo"),
+            importance_sampling_level=cfg["grpo"].get("importance_sampling_level", "sequence"),
+            # Advanced Token-level Settings
+            top_entropy_quantile=cfg["grpo"].get("top_entropy_quantile"),
+            mask_truncated_completions=cfg["grpo"].get("mask_truncated_completions", False),
         )
 
         return grpo_config

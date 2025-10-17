@@ -37,6 +37,15 @@ grpo:
   beta: 0.01                # KL penalty coefficient (enables KL tracking)
   use_vllm: false           # Use vLLM for faster generation (requires vllm package)
 
+  # Token-level vs Sequence-level Configuration
+  loss_type: "dapo"         # Options: "grpo" (length-biased), "dr_grpo" (global constant),
+                            #          "dapo" (default, active tokens), "bnpo" (local batch)
+  importance_sampling_level: "sequence"  # Options: "token" (per-token ratios), "sequence" (averaged)
+
+  # Advanced Token-level Settings
+  top_entropy_quantile: null  # Keep top-ρ quantile of tokens by entropy (null = all tokens)
+  mask_truncated_completions: false  # Exclude truncated completions from loss
+
 # LoRA Configuration (optional)
 # Note: lora_alpha defaults to 2x the rank if not specified
 lora:
